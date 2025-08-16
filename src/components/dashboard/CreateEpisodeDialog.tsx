@@ -1,13 +1,17 @@
 import { useState } from 'react'
+import { useForm, useFieldArray } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import * as z from 'zod'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
 import { Badge } from '@/components/ui/badge'
 import { supabase } from '@/integrations/supabase/client'
 import { useToast } from '@/hooks/use-toast'
-import { Calendar, Clock, Plus, X } from 'lucide-react'
+import { Calendar, Clock, Plus, X, Info } from 'lucide-react'
 
 interface CreateEpisodeDialogProps {
   open: boolean
@@ -15,38 +19,42 @@ interface CreateEpisodeDialogProps {
   onEpisodeCreated: () => void
 }
 
+const formSchema = z.object({
+  title: z.string().min(1, "Episode title is required").min(3, "Title must be at least 3 characters"),
+  description: z.string().min(1, "Episode description is required").min(10, "Description must be at least 10 characters"),
+  date: z.string().min(1, "Episode date is required"),
+  timeSlots: z.array(z.object({
+    startTime: z.string().min(1, "Start time is required"),
+    endTime: z.string().min(1, "End time is required")
+  })).min(1, "At least one time slot is required")
+})
+
+type FormData = z.infer<typeof formSchema>
+
 export function CreateEpisodeDialog({ open, onOpenChange, onEpisodeCreated }: CreateEpisodeDialogProps) {
-  const [title, setTitle] = useState('')
-  const [description, setDescription] = useState('')
-  const [date, setDate] = useState('')
-  const [timeSlots, setTimeSlots] = useState<string[]>([])
-  const [newTimeSlot, setNewTimeSlot] = useState('')
   const [loading, setLoading] = useState(false)
   const { toast } = useToast()
+  
+  const form = useForm<FormData>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      title: '',
+      description: '',
+      date: '',
+      timeSlots: []
+    }
+  })
+
+  const { fields, append, remove } = useFieldArray({
+    control: form.control,
+    name: "timeSlots"
+  })
 
   const addTimeSlot = () => {
-    if (newTimeSlot.trim() && !timeSlots.includes(newTimeSlot.trim())) {
-      setTimeSlots([...timeSlots, newTimeSlot.trim()])
-      setNewTimeSlot('')
-    }
+    append({ startTime: '', endTime: '' })
   }
 
-  const removeTimeSlot = (timeSlot: string) => {
-    setTimeSlots(timeSlots.filter(slot => slot !== timeSlot))
-  }
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    
-    if (timeSlots.length === 0) {
-      toast({
-        title: "Error",
-        description: "Please add at least one time slot",
-        variant: "destructive"
-      })
-      return
-    }
-
+  const handleSubmit = async (data: FormData) => {
     setLoading(true)
 
     try {
@@ -56,13 +64,18 @@ export function CreateEpisodeDialog({ open, onOpenChange, onEpisodeCreated }: Cr
         throw new Error('Not authenticated')
       }
 
+      // Format time slots for storage
+      const formattedTimeSlots = data.timeSlots.map(slot => 
+        `${slot.startTime} - ${slot.endTime}`
+      )
+
       const { error } = await supabase
         .from('episodes')
         .insert({
-          title,
-          description,
-          date,
-          time_slots: timeSlots,
+          title: data.title,
+          description: data.description,
+          date: data.date,
+          time_slots: formattedTimeSlots,
           user_id: user.id
         })
 
@@ -70,15 +83,11 @@ export function CreateEpisodeDialog({ open, onOpenChange, onEpisodeCreated }: Cr
 
       toast({
         title: "Success!",
-        description: "Episode invite created successfully.",
+        description: "Episode invite created successfully. Share the booking link with your guests!",
       })
 
       // Reset form
-      setTitle('')
-      setDescription('')
-      setDate('')
-      setTimeSlots([])
-      setNewTimeSlot('')
+      form.reset()
       
       onEpisodeCreated()
       onOpenChange(false)
@@ -93,114 +102,188 @@ export function CreateEpisodeDialog({ open, onOpenChange, onEpisodeCreated }: Cr
     }
   }
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && newTimeSlot.trim()) {
-      e.preventDefault()
-      addTimeSlot()
-    }
-  }
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[525px]">
+      <DialogContent className="sm:max-w-[525px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Calendar className="h-5 w-5 text-primary" />
             Create Episode Invite
           </DialogTitle>
           <DialogDescription>
-            Create a new episode and generate a booking link for guests
+            Create a new episode and generate a booking link for guests to book their preferred time slots
           </DialogDescription>
         </DialogHeader>
         
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="space-y-2">
-            <Label htmlFor="title">Episode Title</Label>
-            <Input
-              id="title"
-              placeholder="e.g., Building the Future of AI"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              required
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
+            <FormField
+              control={form.control}
+              name="title"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-sm font-medium">
+                    Episode Title <span className="text-destructive">*</span>
+                  </FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder="e.g., Building the Future of AI"
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
             />
-          </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="description">Episode Description</Label>
-            <Textarea
-              id="description"
-              placeholder="Brief description of the episode topic..."
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              required
-              rows={3}
+            <FormField
+              control={form.control}
+              name="description"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-sm font-medium">
+                    Episode Description <span className="text-destructive">*</span>
+                  </FormLabel>
+                  <FormControl>
+                    <Textarea
+                      placeholder="Brief description of the episode topic and what guests can expect..."
+                      rows={3}
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
             />
-          </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="date">Episode Date</Label>
-            <Input
-              id="date"
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              required
-              min={new Date().toISOString().split('T')[0]}
+            <FormField
+              control={form.control}
+              name="date"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-sm font-medium">
+                    Episode Date <span className="text-destructive">*</span>
+                  </FormLabel>
+                  <FormControl>
+                    <Input
+                      type="date"
+                      min={new Date().toISOString().split('T')[0]}
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
             />
-          </div>
 
-          <div className="space-y-3">
-            <Label>Available Time Slots</Label>
-            <div className="flex gap-2">
-              <Input
-                placeholder="e.g., 2:00 PM - 3:00 PM EST"
-                value={newTimeSlot}
-                onChange={(e) => setNewTimeSlot(e.target.value)}
-                onKeyPress={handleKeyPress}
-              />
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-medium">
+                  Available Time Slots <span className="text-destructive">*</span>
+                </Label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={addTimeSlot}
+                  className="flex items-center gap-1"
+                >
+                  <Plus className="h-4 w-4" />
+                  Add Time Slot
+                </Button>
+              </div>
+              
+              {fields.length === 0 && (
+                <p className="text-sm text-muted-foreground">
+                  Add at least one time slot for guests to choose from
+                </p>
+              )}
+
+              <div className="space-y-3">
+                {fields.map((field, index) => (
+                  <div key={field.id} className="flex items-start gap-2 p-3 border rounded-lg">
+                    <div className="flex-1 grid grid-cols-2 gap-2">
+                      <FormField
+                        control={form.control}
+                        name={`timeSlots.${index}.startTime`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="text-xs">Start Time</FormLabel>
+                            <FormControl>
+                              <Input
+                                type="time"
+                                {...field}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name={`timeSlots.${index}.endTime`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="text-xs">End Time</FormLabel>
+                            <FormControl>
+                              <Input
+                                type="time"
+                                {...field}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={() => remove(index)}
+                      className="mt-6"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+              
+              {form.formState.errors.timeSlots?.root && (
+                <p className="text-sm text-destructive">
+                  {form.formState.errors.timeSlots.root.message}
+                </p>
+              )}
+            </div>
+
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="flex items-start gap-2">
+                <Info className="h-4 w-4 text-blue-600 mt-0.5" />
+                <div className="text-sm">
+                  <p className="font-medium text-blue-900 mb-1">How guests will be notified:</p>
+                  <p className="text-blue-700">
+                    After creating this episode, you'll get a booking link that you can share with potential guests. 
+                    Guests can visit the link to see available time slots and book their preferred time.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <DialogFooter>
               <Button
                 type="button"
                 variant="outline"
-                size="icon"
-                onClick={addTimeSlot}
-                disabled={!newTimeSlot.trim()}
+                onClick={() => onOpenChange(false)}
+                disabled={loading}
               >
-                <Plus className="h-4 w-4" />
+                Cancel
               </Button>
-            </div>
-            
-            {timeSlots.length > 0 && (
-              <div className="flex flex-wrap gap-2">
-                {timeSlots.map((slot, index) => (
-                  <Badge key={index} variant="secondary" className="flex items-center gap-1">
-                    <Clock className="h-3 w-3" />
-                    {slot}
-                    <button
-                      type="button"
-                      onClick={() => removeTimeSlot(slot)}
-                      className="ml-1 hover:text-destructive"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </Badge>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-            >
-              Cancel
-            </Button>
-            <Button type="submit" className="btn-podcast" disabled={loading}>
-              {loading ? "Creating..." : "Create Episode"}
-            </Button>
-          </DialogFooter>
-        </form>
+              <Button type="submit" className="btn-podcast" disabled={loading}>
+                {loading ? "Creating..." : "Create Episode"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </Form>
       </DialogContent>
     </Dialog>
   )
