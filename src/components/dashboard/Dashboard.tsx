@@ -30,7 +30,7 @@ export function Dashboard() {
         .from('episodes')
         .select(`
           *,
-          guests (count)
+          episode_guests (count)
         `)
         .order('date', { ascending: true })
 
