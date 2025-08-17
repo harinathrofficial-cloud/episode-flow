@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { DashboardLayout } from './DashboardLayout'
 import { CreateEpisodeDialog } from './CreateEpisodeDialog'
+import { EpisodeDetailsDialog } from './EpisodeDetailsDialog'
 import { Plus, Calendar, Clock, Users, Mic2 } from 'lucide-react'
 import { supabase } from '@/integrations/supabase/client'
 import { useToast } from '@/hooks/use-toast'
@@ -22,6 +23,8 @@ export function Dashboard() {
   const [episodes, setEpisodes] = useState<Episode[]>([])
   const [loading, setLoading] = useState(true)
   const [showCreateDialog, setShowCreateDialog] = useState(false)
+  const [showDetailsDialog, setShowDetailsDialog] = useState(false)
+  const [selectedEpisode, setSelectedEpisode] = useState<Episode | null>(null)
   const { toast } = useToast()
 
   const fetchEpisodes = async () => {
@@ -182,7 +185,14 @@ export function Dashboard() {
                           {episode.guest_count || 0} guests
                         </div>
                       </div>
-                      <Button variant="outline" size="sm">
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => {
+                          setSelectedEpisode(episode)
+                          setShowDetailsDialog(true)
+                        }}
+                      >
                         View Details
                       </Button>
                     </div>
@@ -198,6 +208,12 @@ export function Dashboard() {
         open={showCreateDialog}
         onOpenChange={setShowCreateDialog}
         onEpisodeCreated={fetchEpisodes}
+      />
+
+      <EpisodeDetailsDialog 
+        open={showDetailsDialog}
+        onOpenChange={setShowDetailsDialog}
+        episode={selectedEpisode}
       />
     </DashboardLayout>
   )
