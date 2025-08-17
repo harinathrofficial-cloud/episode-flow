@@ -27,6 +27,17 @@ const formSchema = z.object({
     startTime: z.string().min(1, "Start time is required"),
     endTime: z.string().min(1, "End time is required")
   })).min(1, "At least one time slot is required")
+    .superRefine((timeSlots, ctx) => {
+      timeSlots.forEach((slot, index) => {
+        if (slot.startTime && slot.endTime && slot.startTime >= slot.endTime) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Start time must be before end time",
+            path: [index, "startTime"]
+          });
+        }
+      });
+    })
 })
 
 type FormData = z.infer<typeof formSchema>
@@ -199,16 +210,16 @@ export function CreateEpisodeDialog({ open, onOpenChange, onEpisodeCreated }: Cr
                 </p>
               )}
 
-              <div className="space-y-3">
+                <div className="space-y-3">
                 {fields.map((field, index) => (
-                  <div key={field.id} className="flex items-start gap-2 p-3 border rounded-lg">
+                  <div key={field.id} className="flex items-center gap-2 p-3 border rounded-lg">
                     <div className="flex-1 grid grid-cols-2 gap-2">
                       <FormField
                         control={form.control}
                         name={`timeSlots.${index}.startTime`}
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel className="text-xs">Start Time</FormLabel>
+                            <FormLabel className="text-xs">Start Time <span className="text-destructive">*</span></FormLabel>
                             <FormControl>
                               <Input
                                 type="time"
@@ -224,7 +235,7 @@ export function CreateEpisodeDialog({ open, onOpenChange, onEpisodeCreated }: Cr
                         name={`timeSlots.${index}.endTime`}
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel className="text-xs">End Time</FormLabel>
+                            <FormLabel className="text-xs">End Time <span className="text-destructive">*</span></FormLabel>
                             <FormControl>
                               <Input
                                 type="time"
@@ -241,7 +252,7 @@ export function CreateEpisodeDialog({ open, onOpenChange, onEpisodeCreated }: Cr
                       variant="outline"
                       size="icon"
                       onClick={() => remove(index)}
-                      className="mt-6"
+                      className="self-start"
                     >
                       <X className="h-4 w-4" />
                     </Button>
@@ -269,7 +280,7 @@ export function CreateEpisodeDialog({ open, onOpenChange, onEpisodeCreated }: Cr
               </div>
             </div>
 
-            <DialogFooter>
+            <DialogFooter className="flex flex-row justify-end gap-2">
               <Button
                 type="button"
                 variant="outline"
