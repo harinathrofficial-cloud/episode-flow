@@ -9,9 +9,10 @@ import { Textarea } from '@/components/ui/textarea'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
 import { Badge } from '@/components/ui/badge'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { supabase } from '@/integrations/supabase/client'
 import { useToast } from '@/hooks/use-toast'
-import { Calendar, Clock, Plus, X, Info } from 'lucide-react'
+import { Calendar, Clock, Plus, X, Info, Mail, Users } from 'lucide-react'
 
 interface CreateEpisodeDialogProps {
   open: boolean
@@ -37,13 +38,18 @@ const formSchema = z.object({
           });
         }
       });
-    })
+    }),
+  guests: z.array(z.object({
+    name: z.string().min(1, "Guest name is required"),
+    email: z.string().email("Valid email is required")
+  })).optional()
 })
 
 type FormData = z.infer<typeof formSchema>
 
 export function CreateEpisodeDialog({ open, onOpenChange, onEpisodeCreated }: CreateEpisodeDialogProps) {
   const [loading, setLoading] = useState(false)
+  const [sendingInvites, setSendingInvites] = useState(false)
   const { toast } = useToast()
   
   const form = useForm<FormData>({
@@ -52,17 +58,27 @@ export function CreateEpisodeDialog({ open, onOpenChange, onEpisodeCreated }: Cr
       title: '',
       description: '',
       date: '',
-      timeSlots: []
+      timeSlots: [],
+      guests: []
     }
   })
 
-  const { fields, append, remove } = useFieldArray({
+  const { fields: timeSlotFields, append: appendTimeSlot, remove: removeTimeSlot } = useFieldArray({
     control: form.control,
     name: "timeSlots"
   })
 
+  const { fields: guestFields, append: appendGuest, remove: removeGuest } = useFieldArray({
+    control: form.control,
+    name: "guests"
+  })
+
   const addTimeSlot = () => {
-    append({ startTime: '', endTime: '' })
+    appendTimeSlot({ startTime: '', endTime: '' })
+  }
+
+  const addGuest = () => {
+    appendGuest({ name: '', email: '' })
   }
 
   const handleSubmit = async (data: FormData) => {
@@ -80,7 +96,7 @@ export function CreateEpisodeDialog({ open, onOpenChange, onEpisodeCreated }: Cr
         `${slot.startTime} - ${slot.endTime}`
       )
 
-      const { error } = await supabase
+      const { data: episode, error } = await supabase
         .from('episodes')
         .insert({
           title: data.title,
@@ -89,12 +105,20 @@ export function CreateEpisodeDialog({ open, onOpenChange, onEpisodeCreated }: Cr
           time_slots: formattedTimeSlots,
           user_id: user.id
         })
+        .select()
+        .single()
 
       if (error) throw error
 
+      // Send invitations to guests if any
+      if (data.guests && data.guests.length > 0) {
+        setSendingInvites(true)
+        await sendInvitations(episode.id, data.guests)
+      }
+
       toast({
         title: "Success!",
-        description: "Episode invite created successfully. Share the booking link with your guests!",
+        description: `Episode created successfully${data.guests?.length ? ' and invitations sent' : ''}!`,
       })
 
       // Reset form
@@ -110,19 +134,43 @@ export function CreateEpisodeDialog({ open, onOpenChange, onEpisodeCreated }: Cr
       })
     } finally {
       setLoading(false)
+      setSendingInvites(false)
+    }
+  }
+
+  const sendInvitations = async (episodeId: string, guests: { name: string; email: string }[]) => {
+    const invitePromises = guests.map(guest => 
+      supabase.functions.invoke('send-invitation', {
+        body: {
+          episodeId,
+          guestName: guest.name,
+          guestEmail: guest.email
+        }
+      })
+    )
+
+    try {
+      await Promise.all(invitePromises)
+    } catch (error) {
+      console.error('Error sending invitations:', error)
+      toast({
+        title: "Warning",
+        description: "Episode created but some invitations failed to send",
+        variant: "destructive"
+      })
     }
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[525px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Calendar className="h-5 w-5 text-primary" />
             Create Episode Invite
           </DialogTitle>
           <DialogDescription>
-            Create a new episode and generate a booking link for guests to book their preferred time slots
+            Create a new episode and send invitations to guests
           </DialogDescription>
         </DialogHeader>
         
@@ -187,95 +235,175 @@ export function CreateEpisodeDialog({ open, onOpenChange, onEpisodeCreated }: Cr
               )}
             />
 
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <Label className="text-sm font-medium">
-                  Available Time Slots <span className="text-destructive">*</span>
-                </Label>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={addTimeSlot}
-                  className="flex items-center gap-1"
-                >
-                  <Plus className="h-4 w-4" />
-                  Add Time Slot
-                </Button>
-              </div>
-              
-              {fields.length === 0 && (
-                <p className="text-sm text-muted-foreground">
-                  Add at least one time slot for guests to choose from
-                </p>
-              )}
+            {/* Time Slots Section */}
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Clock className="h-5 w-5" />
+                    Available Time Slots <span className="text-destructive">*</span>
+                  </CardTitle>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={addTimeSlot}
+                    className="flex items-center gap-1"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add Slot
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {timeSlotFields.length === 0 && (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    Add at least one time slot for guests to choose from
+                  </p>
+                )}
 
                 <div className="space-y-3">
-                {fields.map((field, index) => (
-                  <div key={field.id} className="flex items-center gap-2 p-3 border rounded-lg">
-                    <div className="flex-1 grid grid-cols-2 gap-2">
-                      <FormField
-                        control={form.control}
-                        name={`timeSlots.${index}.startTime`}
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="text-xs">Start Time <span className="text-destructive">*</span></FormLabel>
-                            <FormControl>
-                              <Input
-                                type="time"
-                                {...field}
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name={`timeSlots.${index}.endTime`}
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="text-xs">End Time <span className="text-destructive">*</span></FormLabel>
-                            <FormControl>
-                              <Input
-                                type="time"
-                                {...field}
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
+                  {timeSlotFields.map((field, index) => (
+                    <div key={field.id} className="flex items-center gap-2 p-3 border rounded-lg">
+                      <div className="flex-1 grid grid-cols-2 gap-2">
+                        <FormField
+                          control={form.control}
+                          name={`timeSlots.${index}.startTime`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-xs">Start Time</FormLabel>
+                              <FormControl>
+                                <Input
+                                  type="time"
+                                  {...field}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name={`timeSlots.${index}.endTime`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-xs">End Time</FormLabel>
+                              <FormControl>
+                                <Input
+                                  type="time"
+                                  {...field}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        onClick={() => removeTimeSlot(index)}
+                        className="self-start"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
                     </div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      onClick={() => remove(index)}
-                      className="self-start"
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-              
-              {form.formState.errors.timeSlots?.root && (
-                <p className="text-sm text-destructive">
-                  {form.formState.errors.timeSlots.root.message}
-                </p>
-              )}
-            </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Guests Section */}
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Users className="h-5 w-5" />
+                    Invite Guests
+                  </CardTitle>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={addGuest}
+                    className="flex items-center gap-1"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add Guest
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {guestFields.length === 0 && (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    Optionally add guests to send them invitation emails
+                  </p>
+                )}
+
+                <div className="space-y-3">
+                  {guestFields.map((field, index) => (
+                    <div key={field.id} className="flex items-center gap-2 p-3 border rounded-lg">
+                      <div className="flex-1 grid grid-cols-2 gap-2">
+                        <FormField
+                          control={form.control}
+                          name={`guests.${index}.name`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-xs">Guest Name</FormLabel>
+                              <FormControl>
+                                <Input
+                                  placeholder="John Doe"
+                                  {...field}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name={`guests.${index}.email`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-xs">Email</FormLabel>
+                              <FormControl>
+                                <Input
+                                  type="email"
+                                  placeholder="john@example.com"
+                                  {...field}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        onClick={() => removeGuest(index)}
+                        className="self-start"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
 
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
               <div className="flex items-start gap-2">
                 <Info className="h-4 w-4 text-blue-600 mt-0.5" />
                 <div className="text-sm">
-                  <p className="font-medium text-blue-900 mb-1">How guests will be notified:</p>
-                  <p className="text-blue-700">
-                    After creating this episode, you'll get a booking link that you can share with potential guests. 
-                    Guests can visit the link to see available time slots and book their preferred time.
-                  </p>
+                  <p className="font-medium text-blue-900 mb-1">How it works:</p>
+                  <div className="text-blue-700 space-y-1">
+                    <p>• Guests receive email invitations with unique booking links</p>
+                    <p>• They can select their preferred time slot and confirm attendance</p>
+                    <p>• You'll see real-time updates when guests respond</p>
+                  </div>
                 </div>
               </div>
             </div>
@@ -285,12 +413,16 @@ export function CreateEpisodeDialog({ open, onOpenChange, onEpisodeCreated }: Cr
                 type="button"
                 variant="outline"
                 onClick={() => onOpenChange(false)}
-                disabled={loading}
+                disabled={loading || sendingInvites}
               >
                 Cancel
               </Button>
-              <Button type="submit" className="btn-podcast" disabled={loading}>
-                {loading ? "Creating..." : "Create Episode"}
+              <Button 
+                type="submit" 
+                className="btn-podcast" 
+                disabled={loading || sendingInvites}
+              >
+                {loading ? "Creating..." : sendingInvites ? "Sending Invites..." : "Create Episode"}
               </Button>
             </DialogFooter>
           </form>

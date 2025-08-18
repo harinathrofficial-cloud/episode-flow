@@ -9,7 +9,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Calendar, Clock, Users, Mail, CheckCircle, XCircle } from 'lucide-react'
+import { Calendar, Clock, Users, Mail, CheckCircle, XCircle, RefreshCw } from 'lucide-react'
 import { supabase } from '@/integrations/supabase/client'
 import { useToast } from '@/hooks/use-toast'
 
@@ -27,6 +27,7 @@ interface Guest {
   email: string
   status: string
   episode_id: string
+  selected_time_slot?: string
 }
 
 interface EpisodeDetailsDialogProps {
@@ -66,6 +67,28 @@ export function EpisodeDetailsDialog({ open, onOpenChange, episode }: EpisodeDet
   useEffect(() => {
     if (open && episode) {
       fetchGuests()
+      
+      // Set up real-time subscription
+      const channel = supabase
+        .channel('episode-guests-changes')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'episode_guests',
+            filter: `episode_id=eq.${episode.id}`
+          },
+          (payload) => {
+            console.log('Guest status updated:', payload)
+            fetchGuests() // Refresh guest list
+          }
+        )
+        .subscribe()
+
+      return () => {
+        supabase.removeChannel(channel)
+      }
     }
   }, [open, episode])
 
@@ -149,10 +172,20 @@ export function EpisodeDetailsDialog({ open, onOpenChange, episode }: EpisodeDet
           {/* Guests Section */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Users className="h-5 w-5" />
-                Invited Guests ({guests.length})
-              </CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2">
+                  <Users className="h-5 w-5" />
+                  Invited Guests ({guests.length})
+                </CardTitle>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={fetchGuests}
+                  disabled={loading}
+                >
+                  <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               {loading ? (
@@ -176,6 +209,11 @@ export function EpisodeDetailsDialog({ open, onOpenChange, episode }: EpisodeDet
                             <Mail className="h-3 w-3" />
                             {guest.email}
                           </p>
+                          {guest.selected_time_slot && (
+                            <p className="text-xs text-primary font-medium">
+                              Selected: {guest.selected_time_slot}
+                            </p>
+                          )}
                         </div>
                       </div>
                       {getStatusBadge(guest.status)}
@@ -199,7 +237,7 @@ export function EpisodeDetailsDialog({ open, onOpenChange, episode }: EpisodeDet
                 <p><strong>4.</strong> You'll receive updates when guests respond to invitations</p>
               </div>
               <div className="mt-4 p-3 bg-blue-100 rounded-lg">
-                <p className="text-sm font-medium">🚧 Coming Soon: Email invitations and guest booking system</p>
+                <p className="text-sm font-medium">✅ Complete guest invitation system is now active!</p>
               </div>
             </CardContent>
           </Card>
