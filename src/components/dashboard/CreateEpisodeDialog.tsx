@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { TimePicker } from '@/components/ui/time-picker'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
 import { Badge } from '@/components/ui/badge'
@@ -273,9 +274,10 @@ export function CreateEpisodeDialog({ open, onOpenChange, onEpisodeCreated }: Cr
                             <FormItem>
                               <FormLabel className="text-xs">Start Time</FormLabel>
                               <FormControl>
-                                <Input
-                                  type="time"
-                                  {...field}
+                                <TimePicker
+                                  value={field.value}
+                                  onChange={field.onChange}
+                                  placeholder="Select start time"
                                 />
                               </FormControl>
                               <FormMessage />
@@ -289,9 +291,10 @@ export function CreateEpisodeDialog({ open, onOpenChange, onEpisodeCreated }: Cr
                             <FormItem>
                               <FormLabel className="text-xs">End Time</FormLabel>
                               <FormControl>
-                                <Input
-                                  type="time"
-                                  {...field}
+                                <TimePicker
+                                  value={field.value}
+                                  onChange={field.onChange}
+                                  placeholder="Select end time"
                                 />
                               </FormControl>
                               <FormMessage />
