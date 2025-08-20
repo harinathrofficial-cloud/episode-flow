@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { DashboardLayout } from './DashboardLayout'
 import { CreateEpisodeDialog } from './CreateEpisodeDialog'
 import { EpisodeDetailsDialog } from './EpisodeDetailsDialog'
-import { Plus, Calendar, Clock, Users, Mic2 } from 'lucide-react'
+import { Plus, Calendar, Clock, Users, Mic2, CheckCircle, AlertCircle } from 'lucide-react'
 import { supabase } from '@/integrations/supabase/client'
 import { useToast } from '@/hooks/use-toast'
 
@@ -17,6 +17,15 @@ interface Episode {
   time_slots: string[]
   created_at: string
   guest_count?: number
+  confirmed_guests?: number
+  pending_guests?: number
+  episode_guests?: Array<{
+    id: string
+    name: string
+    email: string
+    status: string
+    selected_time_slot?: string
+  }>
 }
 
 export function Dashboard() {
@@ -33,13 +42,27 @@ export function Dashboard() {
         .from('episodes')
         .select(`
           *,
-          episode_guests (count)
+          episode_guests (
+            id,
+            name,
+            email,
+            status,
+            selected_time_slot
+          )
         `)
         .order('date', { ascending: true })
 
       if (error) throw error
 
-      setEpisodes(data || [])
+      // Process the data to add computed fields
+      const processedData = data?.map(episode => ({
+        ...episode,
+        guest_count: episode.episode_guests?.length || 0,
+        confirmed_guests: episode.episode_guests?.filter(g => g.status === 'confirmed').length || 0,
+        pending_guests: episode.episode_guests?.filter(g => g.status === 'pending').length || 0
+      })) || []
+
+      setEpisodes(processedData)
     } catch (error: any) {
       toast({
         title: "Error",
@@ -53,6 +76,48 @@ export function Dashboard() {
 
   useEffect(() => {
     fetchEpisodes()
+
+    // Set up real-time listener for guest responses
+    const channel = supabase
+      .channel('guest-responses')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'episode_guests'
+        },
+        (payload) => {
+          console.log('Guest response received:', payload)
+          const { old: oldRecord, new: newRecord } = payload
+          
+          // Check if status changed from pending to confirmed or if time slot was selected
+          if (oldRecord.status === 'pending' && newRecord.status === 'confirmed') {
+            toast({
+              title: "🎉 Guest Response!",
+              description: `${newRecord.name} has confirmed their attendance and selected a time slot!`,
+              duration: 5000
+            })
+            
+            // Refresh episodes to update counts
+            fetchEpisodes()
+          } else if (!oldRecord.selected_time_slot && newRecord.selected_time_slot) {
+            toast({
+              title: "⏰ Time Slot Selected",
+              description: `${newRecord.name} has selected: ${newRecord.selected_time_slot}`,
+              duration: 4000
+            })
+            
+            // Refresh episodes to update counts
+            fetchEpisodes()
+          }
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
   }, [])
 
   const formatDate = (dateString: string) => {
@@ -173,30 +238,49 @@ export function Dashboard() {
                       </div>
                     </div>
                   </CardHeader>
-                  <CardContent>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                        <div className="flex items-center gap-1">
-                          <Clock className="h-4 w-4" />
-                          {episode.time_slots.length} time slots
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <Users className="h-4 w-4" />
-                          {episode.guest_count || 0} guests
-                        </div>
-                      </div>
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        onClick={() => {
-                          setSelectedEpisode(episode)
-                          setShowDetailsDialog(true)
-                        }}
-                      >
-                        View Details
-                      </Button>
-                    </div>
-                  </CardContent>
+                   <CardContent>
+                     <div className="flex items-center justify-between">
+                       <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                         <div className="flex items-center gap-1">
+                           <Clock className="h-4 w-4" />
+                           {episode.time_slots.length} time slots
+                         </div>
+                         <div className="flex items-center gap-1">
+                           <Users className="h-4 w-4" />
+                           {episode.guest_count || 0} guests
+                         </div>
+                         {episode.confirmed_guests ? (
+                           <div className="flex items-center gap-1 text-green-600">
+                             <CheckCircle className="h-4 w-4" />
+                             {episode.confirmed_guests} confirmed
+                           </div>
+                         ) : null}
+                         {episode.pending_guests ? (
+                           <div className="flex items-center gap-1 text-amber-600">
+                             <AlertCircle className="h-4 w-4" />
+                             {episode.pending_guests} pending
+                           </div>
+                         ) : null}
+                       </div>
+                       <div className="flex items-center gap-2">
+                         {episode.confirmed_guests && episode.confirmed_guests > 0 ? (
+                           <Badge variant="default" className="bg-green-100 text-green-800 border-green-200">
+                             {episode.confirmed_guests} New Response{episode.confirmed_guests > 1 ? 's' : ''}!
+                           </Badge>
+                         ) : null}
+                         <Button 
+                           variant="outline" 
+                           size="sm"
+                           onClick={() => {
+                             setSelectedEpisode(episode)
+                             setShowDetailsDialog(true)
+                           }}
+                         >
+                           View Details
+                         </Button>
+                       </div>
+                     </div>
+                   </CardContent>
                 </Card>
               ))}
             </div>
