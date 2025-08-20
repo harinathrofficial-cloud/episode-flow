@@ -34,10 +34,7 @@ const handler = async (req: Request): Promise<Response> => {
     // Get episode details
     const { data: episode, error: episodeError } = await supabase
       .from('episodes')
-      .select(`
-        *,
-        profiles(first_name, last_name)
-      `)
+      .select('*')
       .eq('id', episodeId)
       .single();
 
@@ -45,6 +42,13 @@ const handler = async (req: Request): Promise<Response> => {
       console.error("Episode not found:", episodeError);
       throw new Error("Episode not found");
     }
+
+    // Get episode creator profile
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('first_name, last_name')
+      .eq('user_id', episode.user_id)
+      .single();
 
     // Create guest record
     const { data: guest, error: guestError } = await supabase
@@ -63,8 +67,8 @@ const handler = async (req: Request): Promise<Response> => {
       throw new Error("Failed to create guest record");
     }
 
-    const hostName = episode.profiles?.first_name && episode.profiles?.last_name 
-      ? `${episode.profiles.first_name} ${episode.profiles.last_name}`
+    const hostName = profile?.first_name && profile?.last_name 
+      ? `${profile.first_name} ${profile.last_name}`
       : "Your host";
 
     const bookingUrl = `${Deno.env.get('SUPABASE_URL')?.replace('supabase.co', 'supabase.co')}/guest-booking/${guest.id}`;
