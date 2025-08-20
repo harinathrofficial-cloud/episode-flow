@@ -71,7 +71,7 @@ const handler = async (req: Request): Promise<Response> => {
       ? `${profile.first_name} ${profile.last_name}`
       : "Your host";
 
-    const bookingUrl = `${Deno.env.get('SUPABASE_URL')?.replace('supabase.co', 'supabase.co')}/guest-booking/${guest.id}`;
+    const bookingUrl = `https://szqxqcqgpbhalhxwbryn.supabase.co/functions/v1/guest-booking/${guest.id}`;
 
     const emailResponse = await resend.emails.send({
       from: "Podcast Invite <onboarding@resend.dev>",
