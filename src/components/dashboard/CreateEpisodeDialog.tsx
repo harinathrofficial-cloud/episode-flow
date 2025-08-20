@@ -304,7 +304,7 @@ export function CreateEpisodeDialog({ open, onOpenChange, onEpisodeCreated }: Cr
                         variant="outline"
                         size="icon"
                         onClick={() => removeTimeSlot(index)}
-                        className="self-start"
+                        className="flex-shrink-0 mt-6"
                       >
                         <X className="h-4 w-4" />
                       </Button>
@@ -384,7 +384,7 @@ export function CreateEpisodeDialog({ open, onOpenChange, onEpisodeCreated }: Cr
                         variant="outline"
                         size="icon"
                         onClick={() => removeGuest(index)}
-                        className="self-start"
+                        className="flex-shrink-0 mt-6"
                       >
                         <X className="h-4 w-4" />
                       </Button>
