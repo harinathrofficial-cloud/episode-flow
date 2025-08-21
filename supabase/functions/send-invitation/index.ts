@@ -74,9 +74,9 @@ const handler = async (req: Request): Promise<Response> => {
     const bookingUrl = `https://szqxqcqgpbhalhxwbryn.supabase.co/functions/v1/guest-booking/${guest.id}`;
 
     const emailResponse = await resend.emails.send({
-      from: "Podcast Invite <onboarding@resend.dev>",
+      from: "Podcast Booking <hello@lovable.dev>",
       to: [guestEmail],
-      subject: `Invitation to "${episode.title}" Podcast`,
+      subject: `🎙️ You're invited to "${episode.title}" Podcast`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
           <h1 style="color: #333; text-align: center;">🎙️ Podcast Invitation</h1>
