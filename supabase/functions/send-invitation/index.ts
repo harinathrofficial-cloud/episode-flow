@@ -1,3 +1,4 @@
+
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { Resend } from "npm:resend@2.0.0";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
@@ -73,8 +74,9 @@ const handler = async (req: Request): Promise<Response> => {
 
     const bookingUrl = `https://szqxqcqgpbhalhxwbryn.supabase.co/functions/v1/guest-booking/${guest.id}`;
 
+    // Use Resend sandbox sender to avoid domain verification issues
     const emailResponse = await resend.emails.send({
-      from: "Podcast Booking <hello@lovable.dev>",
+      from: "Podcast Booking <onboarding@resend.dev>",
       to: [guestEmail],
       subject: `🎙️ You're invited to "${episode.title}" Podcast`,
       html: `
@@ -116,6 +118,12 @@ const handler = async (req: Request): Promise<Response> => {
         </div>
       `,
     });
+
+    // Surface Resend errors instead of claiming success
+    if ((emailResponse as any)?.error) {
+      console.error("Resend send error:", (emailResponse as any).error);
+      throw new Error((emailResponse as any).error?.error || "Failed to send email");
+    }
 
     console.log("Email sent successfully:", emailResponse);
 

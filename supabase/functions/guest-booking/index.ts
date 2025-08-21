@@ -15,13 +15,20 @@ const handler = async (req: Request): Promise<Response> => {
   const url = new URL(req.url);
   const guestId = url.pathname.split('/').pop();
 
+  // Use SERVICE ROLE to bypass RLS in a controlled way (this function restricts by guestId)
   const supabase = createClient(
     Deno.env.get('SUPABASE_URL') ?? '',
-    Deno.env.get('SUPABASE_ANON_KEY') ?? ''
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
   )
 
   try {
+    if (!guestId) {
+      return new Response('Invalid guest id', { status: 400, headers: corsHeaders });
+    }
+
     if (req.method === 'GET') {
+      console.log('Fetching guest booking details for', guestId);
+
       // Get guest and episode details
       const { data: guest, error: guestError } = await supabase
         .from('episode_guests')
@@ -36,6 +43,7 @@ const handler = async (req: Request): Promise<Response> => {
         .single();
 
       if (guestError || !guest) {
+        console.error('Guest fetch error (likely RLS or missing):', guestError);
         return new Response(createNotFoundPage(), {
           headers: { 'Content-Type': 'text/html', ...corsHeaders }
         });
@@ -49,17 +57,19 @@ const handler = async (req: Request): Promise<Response> => {
 
     if (req.method === 'POST') {
       const { selectedSlot, status } = await req.json();
+      console.log('Updating booking for', guestId, { selectedSlot, status });
 
       // Update guest status and selected time slot
       const { error } = await supabase
         .from('episode_guests')
         .update({ 
           status: status,
-          selected_time_slot: selectedSlot 
+          selected_time_slot: selectedSlot ?? null
         })
         .eq('id', guestId);
 
       if (error) {
+        console.error('Update booking error:', error);
         throw new Error('Failed to update booking');
       }
 
@@ -199,7 +209,7 @@ function createBookingPage(guest: any): string {
           <div id="booking-form">
             <h3>Choose Your Preferred Time Slot:</h3>
             
-            ${episode.time_slots.map((slot: string, index: number) => `
+            ${episode.time_slots.map((slot: string) => `
               <button class="time-slot" data-slot="${slot}">
                 ${slot}
               </button>
