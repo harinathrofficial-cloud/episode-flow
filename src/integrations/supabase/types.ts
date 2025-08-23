@@ -21,6 +21,7 @@ export type Database = {
           episode_id: string
           id: string
           name: string | null
+          rejection_note: string | null
           selected_time_slot: string | null
           status: string | null
           updated_at: string
@@ -31,6 +32,7 @@ export type Database = {
           episode_id: string
           id?: string
           name?: string | null
+          rejection_note?: string | null
           selected_time_slot?: string | null
           status?: string | null
           updated_at?: string
@@ -41,6 +43,7 @@ export type Database = {
           episode_id?: string
           id?: string
           name?: string | null
+          rejection_note?: string | null
           selected_time_slot?: string | null
           status?: string | null
           updated_at?: string

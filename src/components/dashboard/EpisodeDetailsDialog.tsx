@@ -28,6 +28,7 @@ interface Guest {
   status: string
   episode_id: string
   selected_time_slot?: string
+  rejection_note?: string
 }
 
 interface EpisodeDetailsDialogProps {
@@ -48,7 +49,7 @@ export function EpisodeDetailsDialog({ open, onOpenChange, episode }: EpisodeDet
     try {
       const { data, error } = await supabase
         .from('episode_guests')
-        .select('*')
+        .select('id, name, email, status, episode_id, selected_time_slot, rejection_note, created_at')
         .eq('episode_id', episode.id)
 
       if (error) throw error
@@ -200,23 +201,31 @@ export function EpisodeDetailsDialog({ open, onOpenChange, episode }: EpisodeDet
               ) : (
                 <div className="space-y-3">
                   {guests.map((guest) => (
-                    <div key={guest.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
-                      <div className="flex items-center gap-3">
-                        {getStatusIcon(guest.status)}
-                        <div>
-                          <p className="font-medium">{guest.name}</p>
-                          <p className="text-sm text-muted-foreground flex items-center gap-1">
-                            <Mail className="h-3 w-3" />
-                            {guest.email}
-                          </p>
-                          {guest.selected_time_slot && (
-                            <p className="text-xs text-primary font-medium">
-                              Selected: {guest.selected_time_slot}
+                    <div key={guest.id} className="space-y-2">
+                      <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                        <div className="flex items-center gap-3">
+                          {getStatusIcon(guest.status)}
+                          <div>
+                            <p className="font-medium">{guest.name}</p>
+                            <p className="text-sm text-muted-foreground flex items-center gap-1">
+                              <Mail className="h-3 w-3" />
+                              {guest.email}
                             </p>
-                          )}
+                            {guest.selected_time_slot && (
+                              <p className="text-xs text-primary font-medium">
+                                Selected: {guest.selected_time_slot}
+                              </p>
+                            )}
+                          </div>
                         </div>
+                        {getStatusBadge(guest.status)}
                       </div>
-                      {getStatusBadge(guest.status)}
+                      {guest.status === 'declined' && guest.rejection_note && (
+                        <div className="ml-7 p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
+                          <p className="text-sm font-medium text-destructive mb-1">Rejection Note:</p>
+                          <p className="text-sm text-muted-foreground">{guest.rejection_note}</p>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>

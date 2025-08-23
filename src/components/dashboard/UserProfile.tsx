@@ -104,20 +104,14 @@ export function UserProfile() {
 
   if (loading) {
     return (
-      <Card>
-        <CardContent className="flex items-center justify-center p-6">
-          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
-        </CardContent>
-      </Card>
+      <div className="flex items-center justify-center p-6">
+        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+      </div>
     )
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Profile Settings</CardTitle>
-      </CardHeader>
-      <CardContent>
+    <div className="space-y-4">
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <FormField
@@ -171,7 +165,6 @@ export function UserProfile() {
             </Button>
           </form>
         </Form>
-      </CardContent>
-    </Card>
+    </div>
   )
 }

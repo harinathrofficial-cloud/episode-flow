@@ -56,16 +56,22 @@ const handler = async (req: Request): Promise<Response> => {
     }
 
     if (req.method === 'POST') {
-      const { selectedSlot, status } = await req.json();
-      console.log('Updating booking for', guestId, { selectedSlot, status });
+      const { selectedSlot, status, rejectionNote } = await req.json();
+      console.log('Updating booking for', guestId, { selectedSlot, status, rejectionNote });
 
       // Update guest status and selected time slot
+      const updateData: any = { 
+        status: status,
+        selected_time_slot: selectedSlot ?? null
+      };
+      
+      if (status === 'declined' && rejectionNote) {
+        updateData.rejection_note = rejectionNote;
+      }
+
       const { error } = await supabase
         .from('episode_guests')
-        .update({ 
-          status: status,
-          selected_time_slot: selectedSlot ?? null
-        })
+        .update(updateData)
         .eq('id', guestId);
 
       if (error) {
@@ -202,8 +208,9 @@ function createBookingPage(guest: any): string {
           </div>
         ` : guest.status === 'declined' ? `
           <div class="success">
-            <h3>Declined</h3>
+            <h3>❌ Declined</h3>
             <p>You have declined this invitation. Thank you for letting us know.</p>
+            ${guest.rejection_note ? `<p><strong>Note:</strong> ${guest.rejection_note}</p>` : ''}
           </div>
         ` : `
           <div id="booking-form">
@@ -222,6 +229,20 @@ function createBookingPage(guest: any): string {
               <button id="decline-btn" class="button decline-btn">
                 Decline Invitation
               </button>
+            </div>
+            
+            <div id="decline-form" style="display: none; margin-top: 20px; padding: 20px; background: #fef2f2; border-radius: 8px; border: 1px solid #fecaca;">
+              <h4>Please let us know why you can't attend (optional):</h4>
+              <textarea id="rejection-note" placeholder="e.g., Scheduling conflict, not available that week..." 
+                style="width: 100%; padding: 8px; margin: 10px 0; border-radius: 4px; border: 1px solid #d1d5db; min-height: 80px;"></textarea>
+              <div>
+                <button id="confirm-decline-btn" class="button decline-btn">
+                  Confirm Decline
+                </button>
+                <button id="cancel-decline-btn" class="button" style="background: #6b7280; margin-left: 10px;">
+                  Cancel
+                </button>
+              </div>
             </div>
           </div>
         `}
@@ -266,17 +287,31 @@ function createBookingPage(guest: any): string {
           }
         });
 
-        document.getElementById('decline-btn')?.addEventListener('click', async function() {
-          if (!confirm('Are you sure you want to decline this invitation?')) return;
-          
+        document.getElementById('decline-btn')?.addEventListener('click', function() {
+          document.getElementById('decline-form').style.display = 'block';
+          this.style.display = 'none';
+        });
+
+        document.getElementById('cancel-decline-btn')?.addEventListener('click', function() {
+          document.getElementById('decline-form').style.display = 'none';
+          document.getElementById('decline-btn').style.display = 'block';
+          document.getElementById('rejection-note').value = '';
+        });
+
+        document.getElementById('confirm-decline-btn')?.addEventListener('click', async function() {
           this.disabled = true;
           this.textContent = 'Declining...';
+          
+          const rejectionNote = document.getElementById('rejection-note').value.trim();
           
           try {
             const response = await fetch(window.location.href, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ status: 'declined' })
+              body: JSON.stringify({ 
+                status: 'declined',
+                rejectionNote: rejectionNote || null
+              })
             });
             
             if (response.ok) {
@@ -284,12 +319,12 @@ function createBookingPage(guest: any): string {
             } else {
               alert('Failed to decline. Please try again.');
               this.disabled = false;
-              this.textContent = 'Decline Invitation';
+              this.textContent = 'Confirm Decline';
             }
           } catch (error) {
             alert('Failed to decline. Please try again.');
             this.disabled = false;
-            this.textContent = 'Decline Invitation';
+            this.textContent = 'Confirm Decline';
           }
         });
       </script>
